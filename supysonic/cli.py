@@ -20,7 +20,8 @@ from pony.orm import ObjectNotFound
 from .config import IniConfig
 from .daemon.client import DaemonClient
 from .daemon.exceptions import DaemonUnavailableError
-from .db import Folder, User, init_database, release_database
+from .db import Folder, PodcastChannel, PodcastStatus, User, init_database, release_database
+from .fetcher import Fetcher
 from .managers.folder import FolderManager
 from .managers.user import UserManager
 from .scanner import Scanner
@@ -144,6 +145,7 @@ class SupysonicCLI(cmd.Cmd):
             return [a for a in parsers.choices if a.startswith(text)]
         return []
 
+    #--------------------------------------------------------------------------
     folder_parser = CLIParser(prog="folder", add_help=False)
     folder_subparsers = folder_parser.add_subparsers(dest="action")
     folder_subparsers.add_parser("list", help="Lists folders", add_help=False)
@@ -305,6 +307,47 @@ class SupysonicCLI(cmd.Cmd):
         except DaemonUnavailableError:
             pass
 
+    #--------------------------------------------------------------------------
+    podcast_parser = CLIParser(prog="podcast", add_help=False)
+    podcast_subparsers = podcast_parser.add_subparsers(dest="action")
+    podcast_subparsers.add_parser("list", help="List podcasts", add_help=False)
+
+    podcast_refresh_parser = podcast_subparsers.add_parser("refresh", help="Refresh episode list for all podcasts", add_help=False)
+    podcast_refresh_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force scan of already known podcasts even if they haven't changed",
+    )
+
+    @db_session
+    def podcast_list(self):
+        line_tmpl = "{0: <20}{1: <10}{2: <10}{3} >> {4}"
+
+        self.write_line(line_tmpl.format("Title", "Status", "Episodes", "Last Fetched", "URL"))
+        self.write_line(line_tmpl.format("-----", "-----", "-----", "-----", "-----"))
+        self.write_line(
+            "\n".join(
+                line_tmpl.format(pc.title, PodcastStatus(pc.status).name, pc.episodes.count(), pc.last_fetched, pc.url)
+                    for pc in PodcastChannel.select()
+            )
+        )
+
+    def podcast_refresh(self, force=False):
+        fetcher = Fetcher(force=force)
+        fetcher.run()
+        stats = fetcher.stats()
+
+        self.write_line("\nPodcast fetching {}".format(stats.state))
+        self.write_line(
+            "Fetched: {0.channels} channels, {0.episodes} episodes, {1} errors".format(stats, len(stats.errors))
+        )
+        if stats.errors:
+            self.write_line("Errors in:")
+            for err in stats.errors:
+                self.write_line("- {}".format(err))
+
+    #--------------------------------------------------------------------------
     user_parser = CLIParser(prog="user", add_help=False)
     user_subparsers = user_parser.add_subparsers(dest="action")
     user_subparsers.add_parser("list", help="List users", add_help=False)
@@ -342,6 +385,13 @@ class SupysonicCLI(cmd.Cmd):
     user_roles_jukebox_group.add_argument(
         "-j", "--nojukebox", action="store_true", help="Revoke jukebox rights"
     )
+    user_roles_podcast_group = user_roles_parser.add_mutually_exclusive_group()
+    user_roles_podcast_group.add_argument(
+        "-C", "--podcast", action="store_true", help="Grant podcast rights"
+    )
+    user_roles_podcast_group.add_argument(
+        "-c", "--nopodcast", action="store_true", help="Revoke podcast rights"
+    )
     user_pass_parser = user_subparsers.add_parser(
         "changepass", help="Changes a user's password", add_help=False
     )
@@ -352,12 +402,16 @@ class SupysonicCLI(cmd.Cmd):
 
     @db_session
     def user_list(self):
-        self.write_line("Name\t\tAdmin\tJukebox\tEmail")
-        self.write_line("----\t\t-----\t-------\t-----")
+        self.write_line("Name\t\tAdmin\tJukebox\tPodcast\tEmail")
+        self.write_line("----\t\t-----\t-------\t-------\t-----")
         self.write_line(
             "\n".join(
-                "{0: <16}{1}\t{2}\t{3}".format(
-                    u.name, "*" if u.admin else "", "*" if u.jukebox else "", u.mail
+                "{0: <16}{1}\t{2}\t{3}\t{4}".format(
+                    u.name,
+                    "*" if u.admin else "",
+                    "*" if u.jukebox else "",
+                    "*" if u.podcast else "",
+                    u.mail
                 )
                 for u in User.select()
             )
@@ -388,7 +442,7 @@ class SupysonicCLI(cmd.Cmd):
             self.write_error_line(str(e))
 
     @db_session
-    def user_setroles(self, name, admin, noadmin, jukebox, nojukebox):
+    def user_setroles(self, name, admin, noadmin, jukebox, nojukebox, podcast, nopodcast):
         user = User.get(name=name)
         if user is None:
             self.write_error_line("No such user")
@@ -405,6 +459,12 @@ class SupysonicCLI(cmd.Cmd):
             elif nojukebox:
                 user.jukebox = False
                 self.write_line("Revoked '{0}' jukebox rights".format(name))
+            if podcast:
+                user.podcast = True
+                self.write_line("Granted '{0}' podcast rights".format(name))
+            elif nopodcast:
+                user.podcast = False
+                self.write_line("Revoked '{0}' podcast rights".format(name))
 
     @db_session
     def user_changepass(self, name, password):

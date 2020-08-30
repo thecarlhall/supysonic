@@ -49,6 +49,12 @@ class DefaultConfig(object):
     LASTFM = {"api_key": None, "secret": None}
     TRANSCODING = {}
     MIMETYPES = {}
+    PODCAST = {
+        "check_interval": "daily",
+        "episode_retention_count": 10,
+        "episode_download_count": 1,
+        "episode_folder": None,
+    }
 
     def __init__(self):
         current_config = self

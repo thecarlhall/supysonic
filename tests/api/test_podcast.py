@@ -14,6 +14,7 @@ import uuid
 from pony.orm import db_session
 
 from supysonic.db import PodcastChannel, PodcastEpisode, PodcastStatus
+from supysonic.config import get_current_config
 
 from unittest import skip
 
@@ -70,11 +71,12 @@ class PodcastTestCase(ApiTestBase):
             self._make_request("createPodcastChannel", {"url": url}, skip_post=True)
 
             self.assertDbCountEqual(PodcastChannel, 1)
-            self.assertDbCountEqual(PodcastEpisode, count)
+            config = get_current_config()
+            self.assertDbCountEqual(PodcastEpisode, min(count, config.PODCAST["episode_retention_count"]))
 
             self.assertPodcastChannelEquals(PodcastChannel.select().first(), url, PodcastStatus.new.value)
             for episode in PodcastEpisode.select():
-                self.assertEqual(episode.status, PodcastStatus.new.value)
+                self.assertEqual(episode.status, PodcastStatus.skipped.value)
 
             PodcastChannel.select().delete()
             PodcastEpisode.select().delete()

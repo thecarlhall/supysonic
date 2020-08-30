@@ -93,6 +93,8 @@ class ApiTestBase(TestBase):
                 self.assertEqual(len(xml), 0)
                 return rg, None
         else:
+            if xml[0].get("code") != str(error):
+                print("!!", rg.data)
             self.assertIsNone(tag)
             self.assertEqual(xml[0].tag, "{{{}}}error".format(NS))
             self.assertEqual(xml[0].get("code"), str(error))
