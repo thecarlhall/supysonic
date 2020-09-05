@@ -18,7 +18,7 @@ from enum import Enum, unique
 from hashlib import sha1
 from pony.orm import Database, Required, Optional, Set, PrimaryKey, LongStr
 from pony.orm import ObjectNotFound, DatabaseError
-from pony.orm import buffer
+from pony.orm import buffer, composite_key
 from pony.orm import min, max, avg, sum, exists
 from pony.orm import db_session
 from urllib.parse import urlparse, parse_qsl
@@ -631,11 +631,12 @@ class PodcastEpisode(db.Entity):
 
     id = PrimaryKey(UUID, default=uuid4)
     channel = Required(PodcastChannel, column="channel_id")
+    title = Required(str)
     # Location of the episode. Used to stream and download.
     stream_url = Required(str)
+    composite_key(channel, title, stream_url)
     # Path of file after it has been downloaded.
     file_path = Optional(str, nullable=True)
-    title = Required(str)
     description = Optional(str, nullable=True)
     duration = Optional(str, nullable=True)
     # Status params mirror PodcastStatus

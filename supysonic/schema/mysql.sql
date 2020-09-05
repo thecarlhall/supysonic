@@ -169,7 +169,8 @@ CREATE TABLE IF NOT EXISTS podcast_channel (
     status TINYINT NOT NULL,
     error_message VARCHAR(256),
     created TIMESTAMP NOT NULL,
-    last_fetched TIMESTAMP
+    last_fetched TIMESTAMP,
+    INDEX index_channel_status (status)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS podcast_episode (
@@ -193,5 +194,6 @@ CREATE TABLE IF NOT EXISTS podcast_episode (
     year SMALLINT,
     FOREIGN KEY(channel_id) REFERENCES podcast_channel(id),
     INDEX index_episode_channel_id_fk (channel_id),
-    INDEX index_episode_status (status)
+    INDEX index_episode_status (status),
+    UNIQUE(channel_id, title, stream_url)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
